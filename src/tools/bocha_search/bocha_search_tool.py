@@ -5,11 +5,11 @@ import json
 import logging
 from typing import Dict, List, Literal, Optional, Tuple, Union
 
-from langchain.callbacks.manager import (
+from langchain_core.callbacks.manager import (
     AsyncCallbackManagerForToolRun,
     CallbackManagerForToolRun,
 )
-from langchain.tools import BaseTool
+from langchain_core.tools import BaseTool
 from pydantic import Field
 
 from src.tools.bocha_search.bocha_search_api_wrapper import BochaSearchAPIWrapper
