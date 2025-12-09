@@ -69,6 +69,13 @@ class BochaSearchTool(BaseTool):
         if query is None and "kwargs" in tool_kwargs and isinstance(tool_kwargs["kwargs"], dict):
             query = tool_kwargs["kwargs"].get("query")
 
+        # Handle case where LLM passes query as positional arg in 'args' list
+        if query is None and "args" in tool_kwargs:
+            args = tool_kwargs["args"]
+            if isinstance(args, list) and len(args) > 0 and isinstance(args[0], str):
+                query = args[0]
+                logger.debug("Extracted query from args list: %s", query)
+
         if query is None:
             error_result = json.dumps(
                 {"error": "BochaSearchTool requires a 'query' argument"},
@@ -123,6 +130,13 @@ class BochaSearchTool(BaseTool):
             query = tool_kwargs.get("query")
         if query is None and "kwargs" in tool_kwargs and isinstance(tool_kwargs["kwargs"], dict):
             query = tool_kwargs["kwargs"].get("query")
+
+        # Handle case where LLM passes query as positional arg in 'args' list
+        if query is None and "args" in tool_kwargs:
+            args = tool_kwargs["args"]
+            if isinstance(args, list) and len(args) > 0 and isinstance(args[0], str):
+                query = args[0]
+                logger.debug("Extracted query from args list (async): %s", query)
 
         if query is None:
             error_result = json.dumps(
