@@ -313,8 +313,11 @@ def planner_node(
     logger.debug(f"Current state messages: {state['messages']}")
     logger.info(f"Planner response: {full_response}")
 
+    # Repair JSON output first (handles markdown code blocks, extra tokens, etc.)
+    repaired_response = repair_json_output(full_response)
+
     # Validate explicitly that response content is valid JSON before proceeding to parse it
-    if not full_response.strip().startswith('{') and not full_response.strip().startswith('['):
+    if not repaired_response.strip().startswith('{') and not repaired_response.strip().startswith('['):
         logger.warning("Planner response does not appear to be valid JSON")
         if plan_iterations > 0:
             return Command(
@@ -328,7 +331,7 @@ def planner_node(
             )
 
     try:
-        curr_plan = json.loads(repair_json_output(full_response))
+        curr_plan = json.loads(repaired_response)
         # Need to extract the plan from the full_response
         curr_plan_content = extract_plan_content(curr_plan)
         # load the current_plan

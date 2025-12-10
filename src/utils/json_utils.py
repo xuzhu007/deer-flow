@@ -106,6 +106,7 @@ def repair_json_output(content: str) -> str:
     Repair and normalize JSON output.
 
     Handles:
+    - JSON wrapped in markdown code blocks (```json ... ```)
     - JSON with extra tokens after closing brackets
     - Incomplete JSON structures
     - Malformed JSON from quantized models
@@ -120,6 +121,13 @@ def repair_json_output(content: str) -> str:
     
     if not content:
         return content
+
+    # Extract JSON from markdown code blocks if present
+    code_block_pattern = r'```(?:json)?\s*([\s\S]*?)```'
+    match = re.search(code_block_pattern, content)
+    if match:
+        content = match.group(1).strip()
+        logger.debug("Extracted JSON from markdown code block")
 
     # First attempt: try to extract valid JSON if there are extra tokens
     content = _extract_json_from_content(content)
