@@ -364,6 +364,9 @@ async def _process_message_chunk(message_chunk, message_metadata, thread_id, age
         tool_call_id = message_chunk.tool_call_id
         event_stream_message["tool_call_id"] = tool_call_id
         
+        # Extract tool name from message if available
+        tool_name = getattr(message_chunk, 'name', None) or 'unknown'
+        
         # Validate tool_call_id for debugging
         if tool_call_id:
             safe_tool_id = sanitize_log_input(tool_call_id, max_length=100)
@@ -372,7 +375,10 @@ async def _process_message_chunk(message_chunk, message_metadata, thread_id, age
             logger.warning(f"[{safe_thread_id}] ToolMessage received without tool_call_id")
         
         logger.debug(f"[{safe_thread_id}] Yielding tool_call_result event")
+        # Inject tool_result tags around the result
+        yield _make_content_tag_event(thread_id, agent_name, f'<tool_result name="{tool_name}">')
         yield _make_event("tool_call_result", event_stream_message)
+        yield _make_content_tag_event(thread_id, agent_name, f'</tool_result>')
     elif isinstance(message_chunk, AIMessageChunk):
         # AI Message - Raw message tokens
         has_tool_calls = bool(message_chunk.tool_calls)
@@ -397,8 +403,14 @@ async def _process_message_chunk(message_chunk, message_metadata, thread_id, age
                     f"Processed chunks: {len(processed_chunks)}"
                 )
             
+            # Extract tool name for tag
+            tool_name = message_chunk.tool_calls[0].get('name', 'unknown') if message_chunk.tool_calls else 'unknown'
+            
             logger.debug(f"[{safe_thread_id}] Yielding tool_calls event")
+            # Inject tool tags around the tool call
+            yield _make_content_tag_event(thread_id, agent_name, f'<tool name="{tool_name}">')
             yield _make_event("tool_calls", event_stream_message)
+            yield _make_content_tag_event(thread_id, agent_name, f'</tool>')
         elif message_chunk.tool_call_chunks:
             # AI Message - Tool Call Chunks (streaming)
             chunks_count = len(message_chunk.tool_call_chunks)
@@ -448,6 +460,10 @@ async def _stream_graph_events(
     """Stream events from the graph and process them."""
     safe_thread_id = sanitize_thread_id(thread_id)
     logger.debug(f"[{safe_thread_id}] Starting graph event stream with agent nodes")
+    
+    # Track current agent for injecting boundary tags
+    current_agent = None
+    
     try:
         event_count = 0
         async for agent, _, event_data in graph_instance.astream(
@@ -475,6 +491,21 @@ async def _stream_graph_events(
                 tuple[BaseMessage, dict[str, Any]], event_data
             )
             
+            # Extract agent name for boundary detection
+            new_agent = _get_agent_name(agent, message_metadata)
+            
+            # Detect agent boundary and inject tags
+            if new_agent and new_agent != current_agent:
+                # Close previous agent tag if exists
+                if current_agent is not None:
+                    logger.debug(f"[{safe_thread_id}] Closing agent tag: {current_agent}")
+                    yield _make_content_tag_event(thread_id, current_agent, f"</agent>")
+                
+                # Open new agent tag
+                logger.debug(f"[{safe_thread_id}] Opening agent tag: {new_agent}")
+                yield _make_content_tag_event(thread_id, new_agent, f'<agent name="{new_agent}">')
+                current_agent = new_agent
+            
             safe_node = sanitize_agent_name(message_metadata.get('langgraph_node', 'unknown'))
             safe_step = sanitize_log_input(message_metadata.get('langgraph_step', 'unknown'))
             logger.debug(
@@ -489,14 +520,25 @@ async def _stream_graph_events(
             ):
                 yield event
         
+        # Close the last agent tag when stream ends
+        if current_agent is not None:
+            logger.debug(f"[{safe_thread_id}] Closing final agent tag: {current_agent}")
+            yield _make_content_tag_event(thread_id, current_agent, f"</agent>")
+        
         logger.debug(f"[{safe_thread_id}] Graph event stream completed. Total events: {event_count}")
     except asyncio.CancelledError:
         # User cancelled/interrupted the stream - this is normal, not an error
         logger.info(f"[{safe_thread_id}] Graph event stream cancelled by user after {event_count} events")
+        # Close agent tag on cancellation
+        if current_agent is not None:
+            yield _make_content_tag_event(thread_id, current_agent, f"</agent>")
         # Re-raise to signal cancellation properly without yielding an error event
         raise
     except Exception as e:
         logger.exception(f"[{safe_thread_id}] Error during graph execution")
+        # Close agent tag on error
+        if current_agent is not None:
+            yield _make_content_tag_event(thread_id, current_agent, f"</agent>")
         yield _make_event(
             "error",
             {
@@ -681,6 +723,29 @@ def _make_event(event_type: str, data: dict[str, any]):
         # Return a safe error event
         error_data = json.dumps({"error": "Serialization failed"}, ensure_ascii=False)
         return f"event: error\ndata: {error_data}\n\n"
+
+
+def _make_content_tag_event(thread_id: str, agent_name: str, tag_content: str) -> str:
+    """
+    Generate a message_chunk event containing only a tag in content.
+    Used to inject agent/tool boundary markers into the stream.
+    
+    Args:
+        thread_id: The thread ID for the event
+        agent_name: The agent name for the event
+        tag_content: The tag string to put in content (e.g., '<agent name="planner">')
+    
+    Returns:
+        SSE formatted event string
+    """
+    data = {
+        "thread_id": thread_id,
+        "agent": agent_name,
+        "id": f"tag-{uuid4().hex[:8]}",
+        "role": "assistant",
+        "content": tag_content,
+    }
+    return _make_event("message_chunk", data)
 
 
 @app.post("/api/tts")
