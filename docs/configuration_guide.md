@@ -204,43 +204,29 @@ The context management doesn't work if the token_limit is not set.
 
 ## About Search Engine
 
-### How to configure Bocha Search?
+### Supported Search Engines
+DeerFlow supports the following search engines:
+- Tavily
+- InfoQuest
+- DuckDuckGo
+- Brave Search
+- Arxiv
+- Searx
+- Serper
+- Wikipedia
 
-Bocha is a Chinese web search API that is particularly suitable for internal/intranet deployments where external search services like Tavily may not be accessible.
+### How to use Serper Search?
 
-#### Environment Variables
-
-Configure Bocha in your `.env` file:
-
-```bash
-SEARCH_API=bocha
-BOCHA_API_KEY=your_bocha_api_key_here
-# Optional: Override API base URL for custom/internal gateway
-BOCHA_API_BASE_URL=https://api.bochaai.com
-```
-
-#### Configuration Options
-
-You can configure Bocha search parameters in your `conf.yaml` file:
-
-```yaml
-SEARCH_ENGINE:
-  freshness: "noLimit"  # Options: "oneDay", "oneWeek", "oneMonth", "oneYear", "noLimit"
-  summary: true          # Include AI-generated summaries in results
-  min_score_threshold: 0.0  # Minimum relevance score threshold (0-1)
-  max_content_length_per_page: 4000  # Maximum content length per result
-```
-
-**Freshness Options:**
-- `oneDay`: Results from the past 24 hours
-- `oneWeek`: Results from the past week
-- `oneMonth`: Results from the past month
-- `oneYear`: Results from the past year
-- `noLimit`: No time restriction (default)
+To use Serper as your search engine, you need to:
+1. Get your API key from [Serper](https://serper.dev/)
+2. Set `SEARCH_API=serper` in your `.env` file
+3. Set `SERPER_API_KEY=your_api_key` in your `.env` file
 
 ### How to control search domains for Tavily?
 
 DeerFlow allows you to control which domains are included or excluded in Tavily search results through the configuration file. This helps improve search result quality and reduce hallucinations by focusing on trusted sources.
+
+`Tips`: it only supports Tavily currently. 
 
 You can configure domain filtering and search results in your `conf.yaml` file as follows:
 
@@ -285,6 +271,39 @@ SEARCH_ENGINE:
   max_content_length_per_page: 5000
 ```
 That's meaning that the search results will be filtered based on the minimum relevance score threshold and truncated to the maximum length limit for each search result content.
+
+## Web Search Toggle
+
+DeerFlow allows you to disable web search functionality, which is useful for environments without internet access or when you want to use only local RAG knowledge bases.
+
+### Configuration
+
+You can disable web search in your `conf.yaml` file:
+
+```yaml
+# Disable web search (use only local RAG)
+ENABLE_WEB_SEARCH: false
+```
+
+Or via API request parameter:
+
+```json
+{
+  "messages": [{"role": "user", "content": "Research topic"}],
+  "enable_web_search": false
+}
+```
+
+> [!WARNING]
+> If you disable web search, make sure to configure local RAG resources; otherwise, the researcher will operate in pure LLM reasoning mode without external data sources.
+
+### Behavior When Web Search is Disabled
+
+- **Background investigation**: Skipped entirely (relies on web search)
+- **Researcher node**: Will use only RAG retriever tools if configured
+- **Pure reasoning mode**: If no RAG resources are available, the researcher will rely solely on LLM reasoning
+
+---
 
 ## RAG (Retrieval-Augmented Generation) Configuration
 

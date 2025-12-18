@@ -18,6 +18,7 @@ class SearchEngine(enum.Enum):
     SEARX = "searx"
     WIKIPEDIA = "wikipedia"
     BOCHA = "bocha"
+    SERPER = "serper"
 
 
 class CrawlerEngine(enum.Enum):
